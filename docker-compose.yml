@@ -13,6 +13,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: new-api:local-prod
+    pull_policy: build
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
