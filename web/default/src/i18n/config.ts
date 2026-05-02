@@ -7,15 +7,32 @@ import ja from './locales/ja.json'
 import ru from './locales/ru.json'
 import vi from './locales/vi.json'
 import zh from './locales/zh.json'
+import zhTW from './locales/zh-TW.json'
 
 export const resources = {
   en,
   zh,
+  'zh-TW': zhTW,
   fr,
   ru,
   ja,
   vi,
 } as const
+
+function normalizeDetectedLanguage(language: string) {
+  const normalized = language.replace(/_/g, '-').toLowerCase()
+  if (
+    normalized === 'zh-tw' ||
+    normalized === 'zh-hk' ||
+    normalized === 'zh-mo' ||
+    normalized === 'zh-hant' ||
+    normalized.startsWith('zh-hant-')
+  ) {
+    return 'zh-TW'
+  }
+  if (normalized.startsWith('zh')) return 'zh'
+  return normalized.split('-')[0]
+}
 
 i18n
   .use(LanguageDetector)
@@ -23,8 +40,8 @@ i18n
   .init({
     resources,
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh', 'fr', 'ru', 'ja', 'vi'],
-    load: 'languageOnly', // Convert zh-CN -> zh
+    supportedLngs: ['en', 'zh', 'zh-TW', 'fr', 'ru', 'ja', 'vi'],
+    load: 'currentOnly',
     nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
     debug: import.meta.env.DEV,
     interpolation: {
@@ -33,6 +50,7 @@ i18n
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
+      convertDetectedLanguage: normalizeDetectedLanguage,
     },
   })
 

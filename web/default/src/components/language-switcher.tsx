@@ -14,7 +14,8 @@ import {
 
 const languages = [
   { code: 'en', label: 'English' },
-  { code: 'zh', label: '中文' },
+  { code: 'zh', label: '简体中文' },
+  { code: 'zh-TW', label: '繁體中文' },
   { code: 'fr', label: 'Français' },
   { code: 'ru', label: 'Русский' },
   { code: 'ja', label: '日本語' },
@@ -24,6 +25,7 @@ const languages = [
 export function LanguageSwitcher() {
   const { i18n, t } = useTranslation()
   const user = useAuthStore((s) => s.auth.user)
+  const activeLanguage = i18n.resolvedLanguage ?? i18n.language
 
   const handleChangeLanguage = useCallback(
     async (code: string) => {
@@ -56,7 +58,10 @@ export function LanguageSwitcher() {
             {lang.label}
             <Check
               size={14}
-              className={cn('ms-auto', i18n.language !== lang.code && 'hidden')}
+              className={cn(
+                'ms-auto',
+                activeLanguage !== lang.code && 'hidden'
+              )}
             />
           </DropdownMenuItem>
         ))}

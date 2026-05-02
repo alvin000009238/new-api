@@ -16,8 +16,9 @@ import { parseUserSettings } from '../lib'
 import type { UserProfile } from '../types'
 
 const LANGUAGE_OPTIONS = [
-  { value: 'zh', label: '简体中文' },
   { value: 'en', label: 'English' },
+  { value: 'zh', label: '简体中文' },
+  { value: 'zh-TW', label: '繁體中文' },
   { value: 'fr', label: 'Français' },
   { value: 'ru', label: 'Русский' },
   { value: 'ja', label: '日本語' },
@@ -27,10 +28,22 @@ const LANGUAGE_OPTIONS = [
 function normalizeLanguage(value?: string | null): string {
   if (!value) return 'en'
   const normalized = value.trim().replace(/_/g, '-').toLowerCase()
+  if (
+    normalized === 'zh-tw' ||
+    normalized === 'zh-hk' ||
+    normalized === 'zh-mo' ||
+    normalized === 'zh-hant' ||
+    normalized.startsWith('zh-hant-')
+  ) {
+    return 'zh-TW'
+  }
   if (normalized.startsWith('zh')) return 'zh'
+  const baseLanguage = normalized.split('-')[0]
   return LANGUAGE_OPTIONS.some((lang) => lang.value === normalized)
     ? normalized
-    : 'en'
+    : LANGUAGE_OPTIONS.some((lang) => lang.value === baseLanguage)
+      ? baseLanguage
+      : 'en'
 }
 
 type LanguagePreferencesCardProps = {
