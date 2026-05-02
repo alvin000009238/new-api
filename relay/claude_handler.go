@@ -130,13 +130,14 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		openAIRequest, convErr := service.ClaudeToOpenAIRequest(*request, info)
+		shouldClaudeMessagesUseResponses(info) {
+		responsesReq, convErr := service.ClaudeMessagesRequestToResponsesRequest(request)
 		if convErr != nil {
 			return types.NewError(convErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
+		info.AppendRequestConversion(types.RelayFormatOpenAIResponses)
+		usage, newApiErr := openAIResponsesViaResponses(c, info, adaptor, responsesReq, true)
 		if newApiErr != nil {
 			return newApiErr
 		}
@@ -211,4 +212,17 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
+}
+
+func shouldClaudeMessagesUseResponses(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	if info.ApiType == constant.APITypeCodex {
+		return true
+	}
+	if info.ApiType == constant.APITypeOpenAI && common.IsOpenAIResponseOnlyModel(info.UpstreamModelName) {
+		return true
+	}
+	return service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)
 }
