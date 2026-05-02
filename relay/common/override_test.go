@@ -2040,6 +2040,7 @@ func TestRemoveDisabledFieldsDefaultFiltering(t *testing.T) {
 		"inference_geo":"eu",
 		"speed":"fast",
 		"cache_control":{"type":"ephemeral"},
+		"metadata":{"user_id":"user-123"},
 		"safety_identifier":"user-123",
 		"store":true,
 		"stream_options":{"include_obfuscation":false}
@@ -2051,6 +2052,22 @@ func TestRemoveDisabledFieldsDefaultFiltering(t *testing.T) {
 		t.Fatalf("RemoveDisabledFields returned error: %v", err)
 	}
 	assertJSONEqual(t, `{"cache_control":{"type":"ephemeral"},"store":true}`, string(out))
+}
+
+func TestRemoveDisabledFieldsAllowMetadata(t *testing.T) {
+	input := `{
+		"metadata":{"user_id":"user-123"},
+		"store":true
+	}`
+	settings := dto.ChannelOtherSettings{
+		AllowMetadata: true,
+	}
+
+	out, err := RemoveDisabledFields([]byte(input), settings, false)
+	if err != nil {
+		t.Fatalf("RemoveDisabledFields returned error: %v", err)
+	}
+	assertJSONEqual(t, `{"metadata":{"user_id":"user-123"},"store":true}`, string(out))
 }
 
 func TestRemoveDisabledFieldsAllowInferenceGeo(t *testing.T) {
