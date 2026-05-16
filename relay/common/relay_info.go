@@ -791,6 +791,11 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		common.SysError("RemoveDisabledFields Unmarshal error :" + err.Error())
 		return jsonData, nil
 	}
+	if !channelOtherSettings.AllowMetadata {
+		if _, exists := data["metadata"]; exists {
+			delete(data, "metadata")
+		}
+	}
 
 	// 默认移除 service_tier，除非明确允许（避免额外计费风险）
 	if !channelOtherSettings.AllowServiceTier {

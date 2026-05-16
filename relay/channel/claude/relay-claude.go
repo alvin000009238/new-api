@@ -582,12 +582,13 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 }
 
 type ClaudeResponseInfo struct {
-	ResponseId   string
-	Created      int64
-	Model        string
-	ResponseText strings.Builder
-	Usage        *dto.Usage
-	Done         bool
+	ResponseId         string
+	Created            int64
+	Model              string
+	ResponseText       strings.Builder
+	Usage              *dto.Usage
+	Done               bool
+	ResponsesConverter *service.ClaudeToResponsesStreamConverter
 }
 
 func cacheCreationTokensForOpenAIUsage(usage *dto.Usage) int {
@@ -826,6 +827,31 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		if err != nil {
 			logger.LogError(c, "send_stream_response_failed: "+err.Error())
 		}
+	} else if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		FormatClaudeResponseInfo(&claudeResponse, nil, claudeInfo)
+		if claudeResponse.Type == "message_start" && claudeResponse.Message != nil {
+			info.UpstreamModelName = claudeResponse.Message.Model
+		}
+		if claudeInfo.ResponsesConverter == nil {
+			claudeInfo.ResponsesConverter = service.NewClaudeToResponsesStreamConverter(claudeInfo.ResponseId, claudeInfo.Created, claudeInfo.Model)
+		}
+		events, usage, convErr := claudeInfo.ResponsesConverter.Convert(&claudeResponse)
+		if convErr != nil {
+			return types.NewError(convErr, types.ErrorCodeBadResponseBody)
+		}
+		if usage != nil {
+			claudeInfo.Usage = usage
+		}
+		for _, event := range events {
+			if event.Type == "" {
+				continue
+			}
+			eventData, err := common.Marshal(event)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeBadResponseBody)
+			}
+			helper.ResponseChunkData(c, event, string(eventData))
+		}
 	}
 	return nil
 }
@@ -849,6 +875,22 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		}
 		claudeInfo.Usage.TotalTokens = claudeInfo.Usage.PromptTokens + claudeInfo.Usage.CompletionTokens
 	}
+	if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		if claudeInfo.Usage != nil {
+			claudeInfo.Usage.UsageSemantic = "openai"
+			claudeInfo.Usage.UsageSource = "anthropic"
+		}
+		if claudeInfo.ResponsesConverter != nil && !claudeInfo.ResponsesConverter.Completed {
+			event := claudeInfo.ResponsesConverter.Complete()
+			if event.Type != "" {
+				if eventData, err := common.Marshal(event); err == nil {
+					helper.ResponseChunkData(c, event, string(eventData))
+				}
+			}
+		}
+		return
+	}
+
 	if claudeInfo.Usage != nil {
 		claudeInfo.Usage.UsageSemantic = "anthropic"
 	}
@@ -875,6 +917,9 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		Model:        info.UpstreamModelName,
 		ResponseText: strings.Builder{},
 		Usage:        &dto.Usage{},
+	}
+	if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		claudeInfo.ResponsesConverter = service.NewClaudeToResponsesStreamConverter(claudeInfo.ResponseId, claudeInfo.Created, claudeInfo.Model)
 	}
 	var err *types.NewAPIError
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
@@ -920,6 +965,18 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		openaiResponse := ResponseClaude2OpenAI(&claudeResponse)
 		openaiResponse.Usage = buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
 		responseData, err = json.Marshal(openaiResponse)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
+	case types.RelayFormatOpenAIResponses:
+		responsesResponse, usage, convErr := service.ClaudeResponseToOpenAIResponsesResponse(&claudeResponse, helper.GetResponseID(c), common.GetTimestamp())
+		if convErr != nil {
+			return types.NewError(convErr, types.ErrorCodeBadResponseBody)
+		}
+		if usage != nil {
+			claudeInfo.Usage = usage
+		}
+		responseData, err = common.Marshal(responsesResponse)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeBadResponseBody)
 		}

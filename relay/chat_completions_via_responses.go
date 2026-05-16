@@ -99,6 +99,10 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	}
 	info.AppendRequestConversion(types.RelayFormatOpenAIResponses)
 
+	return openAIResponsesViaResponses(c, info, adaptor, responsesReq, false)
+}
+
+func openAIResponsesViaResponses(c *gin.Context, info *relaycommon.RelayInfo, adaptor channel.Adaptor, responsesReq *dto.OpenAIResponsesRequest, applyParamOverride bool) (*dto.Usage, *types.NewAPIError) {
 	savedRelayMode := info.RelayMode
 	savedRequestURLPath := info.RequestURLPath
 	defer func() {
@@ -123,6 +127,13 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+
+	if applyParamOverride && len(info.ParamOverride) > 0 {
+		jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
+		if err != nil {
+			return nil, newAPIErrorFromParamOverride(err)
+		}
 	}
 
 	var requestBody io.Reader = bytes.NewBuffer(jsonData)

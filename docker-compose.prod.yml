@@ -1,12 +1,13 @@
-# New-API Docker Compose Configuration
+# Production compose file for running the image built from this repository.
 #
-# Production with Cloudflare Tunnel:
+# Usage:
 #   1. cp .env.prod.example .env
-#   2. Edit .env and set POSTGRES_PASSWORD, SESSION_SECRET, and CLOUDFLARE_TUNNEL_TOKEN.
-#   3. docker compose up -d --build
+#   2. Edit .env and set strong secrets.
+#   3. docker compose -f docker-compose.prod.yml up -d --build
 #
-# The application is not published with a host port. Cloudflare Tunnel should
-# route the public hostname to http://new-api:3000 inside this compose network.
+# Rebuild after pulling updates:
+#   docker compose -f docker-compose.prod.yml up -d --build new-api
+
 services:
   new-api:
     build:
@@ -17,8 +18,8 @@ services:
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
-    expose:
-      - '3000'
+    ports:
+      - "${NEW_API_PORT:-3000}:3000"
     volumes:
       - ./data:/data
       - ./logs:/app/logs
@@ -29,10 +30,12 @@ services:
       TZ: "${TZ:-Asia/Taipei}"
       ERROR_LOG_ENABLED: "true"
       BATCH_UPDATE_ENABLED: "true"
-      NODE_NAME: "${NODE_NAME:-new-api-node-1}"
+      NODE_NAME: "${NODE_NAME:-new-api-prod-1}"
     depends_on:
-      - redis
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
       interval: 30s
@@ -41,14 +44,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: new-api-redis
     restart: always
     volumes:
       - redis_data:/data
 
   postgres:
     image: postgres:15-alpine
-    container_name: postgres
+    container_name: new-api-postgres
     restart: always
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-root}"
@@ -56,19 +59,11 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-new-api}"
     volumes:
       - pg_data:/var/lib/postgresql/data
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared
-    restart: always
-    command:
-      - tunnel
-      - --no-autoupdate
-      - run
-      - --token
-      - "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}"
-    depends_on:
-      - new-api
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-root} -d ${POSTGRES_DB:-new-api}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pg_data:
